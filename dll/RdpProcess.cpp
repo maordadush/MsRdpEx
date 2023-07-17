@@ -261,7 +261,7 @@ public:
         }
 
         if (!appName) {
-            appPathId = MSRDPEX_MSTSC_EXE_PATH;
+            appPathId = MSRDPEX_MSRDC_EXE_PATH;
         }
 
         if (appName) {
