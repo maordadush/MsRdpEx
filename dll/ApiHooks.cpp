@@ -444,8 +444,25 @@ BOOL Hook_CryptBinaryToStringW(const BYTE *pbBinary, DWORD cbBinary, DWORD dwFla
 
     success = Real_CryptBinaryToStringW(pbBinary, cbBinary, dwFlags, pszString, pcchString);
 
-    // MsRdpEx_LogPrint(DEBUG, "CryptBinaryToStringW(pcchString=%d):", pcchString);
-    // MsRdpEx_LogDump(TRACE, (uint8_t*)pszString, (size_t)pcchString);
+    // MsRdpEx_LogPrint(DEBUG, "CryptBinaryToStringW(pcchString=%d):", *pcchString);
+    // MsRdpEx_LogDump(TRACE, (uint8_t*)pszString, (size_t) *pcchString);
+
+    return success;
+}
+
+BOOL(WINAPI* Real_CryptImportPublicKeyInfoEx2)(DWORD dwCertEncodingType, PCERT_PUBLIC_KEY_INFO pInfo, DWORD dwFlags, void *pvAuxInfo, BCRYPT_KEY_HANDLE *phKey) = CryptImportPublicKeyInfoEx2;
+
+BOOL Hook_CryptImportPublicKeyInfoEx2(DWORD dwCertEncodingType, PCERT_PUBLIC_KEY_INFO pInfo, DWORD dwFlags, void *pvAuxInfo, BCRYPT_KEY_HANDLE *phKey)
+{
+    BOOL success;
+
+    MsRdpEx_LogPrint(TRACE, "CryptImportPublicKeyInfoEx2(pInfo->Algorithm.pszObjId=%s, pInfo->PublicKey.cbData=%d, dwCertEncodingType=%d):", pInfo->Algorithm.pszObjId, pInfo->PublicKey.cbData, dwCertEncodingType);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pInfo->PublicKey.pbData, (size_t)pInfo->PublicKey.cbData);
+
+    success = Real_CryptImportPublicKeyInfoEx2(dwCertEncodingType, pInfo, dwFlags, pvAuxInfo, phKey);
+
+    MsRdpEx_LogPrint(TRACE, "CryptImportPublicKeyInfoEx2(phKey=%p):", *phKey);
+    // MsRdpEx_LogDump(TRACE, (uint8_t*)pszString, (size_t) *pcchString);
 
     return success;
 }
@@ -497,7 +514,7 @@ NTSTATUS Hook_BCryptImportKeyPair(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDL
 
     success = Real_BCryptImportKeyPair(hAlgorithm, hImportKey, pszBlobType, phKey, pbInput, cbInput, dwFlags);
 
-    // MsRdpEx_LogPrint(DEBUG, "CryptUnprotectData(pDataOut->cbData=%d):", pDataOut->cbData);
+    MsRdpEx_LogPrint(DEBUG, "BCryptImportKeyPair(phKey=%p):", phKey);
     // MsRdpEx_LogDump(TRACE, (uint8_t*)pDataOut->pbData, (size_t)cbInput);
 
     return success;
@@ -599,6 +616,7 @@ LONG MsRdpEx_AttachHooks()
     //MSRDPEX_DETOUR_ATTACH(Real_CryptProtectData, Hook_CryptProtectData);
     //MSRDPEX_DETOUR_ATTACH(Real_CryptUnprotectData, Hook_CryptUnprotectData);
     MSRDPEX_DETOUR_ATTACH(Real_CryptBinaryToStringW, Hook_CryptBinaryToStringW);
+    MSRDPEX_DETOUR_ATTACH(Real_CryptImportPublicKeyInfoEx2, Hook_CryptImportPublicKeyInfoEx2);
 
     g_hBCrypt = GetModuleHandleA("ncrypt.dll");
 
@@ -652,6 +670,7 @@ LONG MsRdpEx_DetachHooks()
     //MSRDPEX_DETOUR_DETACH(Real_CryptProtectData, Hook_CryptProtectData);
     //MSRDPEX_DETOUR_DETACH(Real_CryptUnprotectData, Hook_CryptUnprotectData);
     MSRDPEX_DETOUR_DETACH(Real_CryptBinaryToStringW, Hook_CryptBinaryToStringW);
+    MSRDPEX_DETOUR_DETACH(Real_CryptImportPublicKeyInfoEx2, Hook_CryptImportPublicKeyInfoEx2);
 
     if (g_hBCrypt) {
         MSRDPEX_DETOUR_DETACH(Real_BCryptImportKey, Hook_BCryptImportKey);
