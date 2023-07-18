@@ -367,6 +367,7 @@ BOOL Hook_CredReadW(LPCWSTR TargetName, DWORD Type, DWORD Flags, PCREDENTIALW* C
 }
 
 #include <dpapi.h>
+#include <wincrypt.h>
 #pragma comment(lib, "crypt32.lib")
 
 BOOL(WINAPI* Real_CryptProtectMemory)(LPVOID pDataIn, DWORD cbDataIn, DWORD dwFlags) = CryptProtectMemory;
@@ -432,6 +433,23 @@ BOOL Hook_CryptUnprotectData(DATA_BLOB* pDataIn, LPWSTR* ppszDataDescr, DATA_BLO
     return success;
 }
 
+BOOL(WINAPI* Real_CryptBinaryToStringW)(const BYTE *pbBinary, DWORD cbBinary, DWORD dwFlags, LPWSTR pszString, DWORD *pcchString) = CryptBinaryToStringW;
+
+BOOL Hook_CryptBinaryToStringW(const BYTE *pbBinary, DWORD cbBinary, DWORD dwFlags, LPWSTR pszString, DWORD *pcchString)
+{
+    BOOL success;
+
+    MsRdpEx_LogPrint(TRACE, "CryptBinaryToStringW(pbBinary=%p, cbBinary=%d):", pbBinary, cbBinary);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbBinary, (size_t)cbBinary);
+
+    success = Real_CryptBinaryToStringW(pbBinary, cbBinary, dwFlags, pszString, pcchString);
+
+    // MsRdpEx_LogPrint(DEBUG, "CryptBinaryToStringW(pcchString=%d):", pcchString);
+    // MsRdpEx_LogDump(TRACE, (uint8_t*)pszString, (size_t)pcchString);
+
+    return success;
+}
+
 #include <bcrypt.h>
 
 static HMODULE g_hBCrypt = NULL;
@@ -454,8 +472,11 @@ NTSTATUS Hook_BCryptImportKey(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDLE hI
 {
     NTSTATUS success;
 
-    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pszBlobType=%s, cbInput=%d):", pszBlobType, cbInput);
+    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pszBlobType=%s, cbInput=%d, phKey:%p):", pszBlobType, cbInput, phKey);
+    //MsRdpEx_LogDump(TRACE, (uint8_t*)pszBlobType, 30);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
+    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pbKeyObject=%d, cbKeyObject=%d):", pbKeyObject, cbKeyObject);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbKeyObject, (size_t)cbKeyObject);
 
     success = Real_BCryptImportKey(hAlgorithm, hImportKey, pszBlobType, phKey, pbKeyObject, cbKeyObject, pbInput, cbInput, dwFlags);
 
@@ -486,9 +507,10 @@ NTSTATUS Hook_BCryptEncrypt(BCRYPT_KEY_HANDLE hKey, PUCHAR pbInput,
 {
     NTSTATUS success;
 
-    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(cbInput=%d, dwFlags=%d):", cbInput, dwFlags);
+    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(cbInput=%d, dwFlags=%d, pbIV=%d, cbIV=%d, hKey=%p, pcbResult=%d):", cbInput, dwFlags, pbIV, cbIV, &hKey, *pcbResult);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
-    MsRdpEx_LogDump(TRACE, (uint8_t*)pbIV, (size_t)cbIV);
+    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(pbOutput=%p, cbOutput=%d, hKey=%p, pcbResult=%d):", pbOutput, cbOutput, &hKey, *pcbResult);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbOutput, (size_t)cbOutput);
 
     success = Real_BCryptEncrypt(hKey, pbInput, cbInput, pPaddingInfo, pbIV, cbIV, pbOutput, cbOutput, pcbResult, dwFlags);
 
@@ -573,6 +595,7 @@ LONG MsRdpEx_AttachHooks()
     //MSRDPEX_DETOUR_ATTACH(Real_CryptUnprotectMemory, Hook_CryptUnprotectMemory);
     //MSRDPEX_DETOUR_ATTACH(Real_CryptProtectData, Hook_CryptProtectData);
     //MSRDPEX_DETOUR_ATTACH(Real_CryptUnprotectData, Hook_CryptUnprotectData);
+    MSRDPEX_DETOUR_ATTACH(Real_CryptBinaryToStringW, Hook_CryptBinaryToStringW);
 
     g_hBCrypt = GetModuleHandleA("ncrypt.dll");
 
@@ -625,6 +648,7 @@ LONG MsRdpEx_DetachHooks()
     //MSRDPEX_DETOUR_DETACH(Real_CryptUnprotectMemory, Hook_CryptUnprotectMemory);
     //MSRDPEX_DETOUR_DETACH(Real_CryptProtectData, Hook_CryptProtectData);
     //MSRDPEX_DETOUR_DETACH(Real_CryptUnprotectData, Hook_CryptUnprotectData);
+    MSRDPEX_DETOUR_DETACH(Real_CryptBinaryToStringW, Hook_CryptBinaryToStringW);
 
     if (g_hBCrypt) {
         MSRDPEX_DETOUR_DETACH(Real_BCryptImportKey, Hook_BCryptImportKey);
