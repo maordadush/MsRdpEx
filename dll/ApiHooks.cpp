@@ -475,10 +475,11 @@ NTSTATUS Hook_BCryptImportKey(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDLE hI
     MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pszBlobType=%s, cbInput=%d, phKey:%p):", pszBlobType, cbInput, phKey);
     //MsRdpEx_LogDump(TRACE, (uint8_t*)pszBlobType, 30);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
-    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pbKeyObject=%d, cbKeyObject=%d):", pbKeyObject, cbKeyObject);
-    MsRdpEx_LogDump(TRACE, (uint8_t*)pbKeyObject, (size_t)cbKeyObject);
 
     success = Real_BCryptImportKey(hAlgorithm, hImportKey, pszBlobType, phKey, pbKeyObject, cbKeyObject, pbInput, cbInput, dwFlags);
+
+    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pbKeyObject=%d, cbKeyObject=%d):", pbKeyObject, cbKeyObject);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbKeyObject, (size_t)cbKeyObject);
 
     // MsRdpEx_LogPrint(DEBUG, "CryptUnprotectData(pDataOut->cbData=%d):", pDataOut->cbData);
     // MsRdpEx_LogDump(TRACE, (uint8_t*)pDataOut->pbData, (size_t)cbInput);
@@ -509,10 +510,12 @@ NTSTATUS Hook_BCryptEncrypt(BCRYPT_KEY_HANDLE hKey, PUCHAR pbInput,
 
     MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(cbInput=%d, dwFlags=%d, pbIV=%d, cbIV=%d, hKey=%p, pcbResult=%d):", cbInput, dwFlags, pbIV, cbIV, &hKey, *pcbResult);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
-    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(pbOutput=%p, cbOutput=%d, hKey=%p, pcbResult=%d):", pbOutput, cbOutput, &hKey, *pcbResult);
-    MsRdpEx_LogDump(TRACE, (uint8_t*)pbOutput, (size_t)cbOutput);
+    
 
     success = Real_BCryptEncrypt(hKey, pbInput, cbInput, pPaddingInfo, pbIV, cbIV, pbOutput, cbOutput, pcbResult, dwFlags);
+
+    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(pbOutput=%p, cbOutput=%d, hKey=%p, pcbResult=%d):", pbOutput, cbOutput, &hKey, *pcbResult);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbOutput, (size_t)cbOutput);
 
     // MsRdpEx_LogPrint(DEBUG, "CryptUnprotectData(pDataOut->cbData=%d):", pDataOut->cbData);
     // MsRdpEx_LogDump(TRACE, (uint8_t*)pDataOut->pbData, (size_t)cbInput);
