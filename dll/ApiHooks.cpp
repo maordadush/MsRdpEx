@@ -438,14 +438,15 @@ BOOL(WINAPI* Real_CryptBinaryToStringW)(const BYTE *pbBinary, DWORD cbBinary, DW
 BOOL Hook_CryptBinaryToStringW(const BYTE *pbBinary, DWORD cbBinary, DWORD dwFlags, LPWSTR pszString, DWORD *pcchString)
 {
     BOOL success;
+    char* formmated_string = NULL;
 
     MsRdpEx_LogPrint(TRACE, "CryptBinaryToStringW(pbBinary=%p, cbBinary=%d):", pbBinary, cbBinary);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbBinary, (size_t)cbBinary);
 
     success = Real_CryptBinaryToStringW(pbBinary, cbBinary, dwFlags, pszString, pcchString);
-
-    // MsRdpEx_LogPrint(DEBUG, "CryptBinaryToStringW(pcchString=%d):", *pcchString);
-    // MsRdpEx_LogDump(TRACE, (uint8_t*)pszString, (size_t) *pcchString);
+    MsRdpEx_LogPrint(TRACE, "CryptBinaryToStringW(phKey=%p, pcchString=%d):", pszString, *pcchString);
+    // MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszString, -1, &formmated_string, *pcchString, NULL, NULL);
+    // MsRdpEx_LogPrint(TRACE, "CryptBinaryToStringW formmated_string: %s", formmated_string);
 
     return success;
 }
@@ -480,21 +481,36 @@ typedef NTSTATUS(WINAPI* fnBCryptImportKeyPair)(BCRYPT_ALG_HANDLE hAlgorithm, BC
 typedef NTSTATUS(WINAPI* fnBCryptEncrypt)(BCRYPT_KEY_HANDLE hKey, PUCHAR pbInput,
     ULONG cbInput, VOID* pPaddingInfo, PUCHAR pbIV, ULONG cbIV, PUCHAR pbOutput, ULONG cbOutput, ULONG* pcbResult, ULONG dwFlags);
 
+typedef NTSTATUS(WINAPI* fnBCryptOpenAlgorithmProvider)(BCRYPT_ALG_HANDLE* phAlgorithm, LPCWSTR pszAlgId, LPCWSTR pszImplementation, ULONG dwFlags);
+
+typedef NTSTATUS(WINAPI* fnBCryptSetProperty)(BCRYPT_HANDLE hObject, LPCWSTR pszProperty, PUCHAR pbInput, ULONG cbInput, ULONG dwFlags);
+
+typedef NTSTATUS(WINAPI* fnBCryptGetProperty)(BCRYPT_HANDLE hObject, LPCWSTR pszProperty, PUCHAR pbOutput, ULONG cbOutput, ULONG* pcbResult, ULONG dwFlags);
+
+typedef NTSTATUS(WINAPI* fnBCryptGenRandom)(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags);
+
 static fnBCryptImportKey Real_BCryptImportKey = NULL;
 static fnBCryptImportKeyPair Real_BCryptImportKeyPair = NULL;
 static fnBCryptEncrypt Real_BCryptEncrypt = NULL;
+static fnBCryptOpenAlgorithmProvider Real_BCryptOpenAlgorithmProvider = NULL;
+static fnBCryptSetProperty Real_BCryptSetProperty = NULL;
+static fnBCryptGetProperty Real_BCryptGetProperty = NULL;
+static fnBCryptGenRandom Real_BCryptGenRandom = NULL;
 
 NTSTATUS Hook_BCryptImportKey(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDLE hImportKey,
     LPCWSTR pszBlobType, BCRYPT_KEY_HANDLE* phKey, PUCHAR pbKeyObject, ULONG cbKeyObject, PUCHAR pbInput, ULONG cbInput, ULONG dwFlags)
 {
     NTSTATUS success;
+    char* blobtype = NULL;
 
-    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pszBlobType=%s, cbInput=%d):", pszBlobType, cbInput);
+    MsRdpEx_LogPrint(TRACE, "BCryptImportKey_input(cbInput=%d, hAlgorithm=%p):", cbInput, hAlgorithm);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszBlobType, -1, &blobtype, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptImportKey blobtype: %s", blobtype);
 
     success = Real_BCryptImportKey(hAlgorithm, hImportKey, pszBlobType, phKey, pbKeyObject, cbKeyObject, pbInput, cbInput, dwFlags);
 
-    MsRdpEx_LogPrint(TRACE, "BCryptImportKey(pbKeyObject=%p, cbKeyObject=%d, phKey:%p):", pbKeyObject, cbKeyObject, *phKey);
+    MsRdpEx_LogPrint(TRACE, "BCryptImportKey_output(pbKeyObject=%p, cbKeyObject=%d, phKey:%p):", pbKeyObject, cbKeyObject, *phKey);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbKeyObject, (size_t)cbKeyObject);
 
     return success;
@@ -521,17 +537,80 @@ NTSTATUS Hook_BCryptEncrypt(BCRYPT_KEY_HANDLE hKey, PUCHAR pbInput,
 {
     NTSTATUS success;
 
-    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(cbInput=%d, dwFlags=%d, pbIV=%d, cbIV=%d, hKey=%p, pcbResult=%d):", cbInput, dwFlags, pbIV, cbIV, hKey, *pcbResult);
+    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt_input(cbInput=%d, dwFlags=%d, pbIV=%p, cbIV=%d, hKey=%p, pcbResult=%d, pPaddingInfo:%s):", cbInput, dwFlags, pbIV, cbIV, hKey, *pcbResult, pPaddingInfo);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbIV, (size_t)cbIV);
     
 
     success = Real_BCryptEncrypt(hKey, pbInput, cbInput, pPaddingInfo, pbIV, cbIV, pbOutput, cbOutput, pcbResult, dwFlags);
 
-    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt(pbOutput=%p, cbOutput=%d, hKey=%p, pcbResult=%d):", pbOutput, cbOutput, hKey, *pcbResult);
+    MsRdpEx_LogPrint(TRACE, "BCryptEncrypt_output(pbOutput=%p, cbOutput=%d, hKey=%p, pcbResult=%d, pbIV=%p):", pbOutput, cbOutput, hKey, *pcbResult, pbIV);
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbOutput, (size_t)cbOutput);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbIV, (size_t)cbIV);
 
-    // MsRdpEx_LogPrint(DEBUG, "CryptUnprotectData(pDataOut->cbData=%d):", pDataOut->cbData);
-    // MsRdpEx_LogDump(TRACE, (uint8_t*)pDataOut->pbData, (size_t)cbInput);
+    return success;
+}
+
+NTSTATUS Hook_BCryptOpenAlgorithmProvider(BCRYPT_ALG_HANDLE* phAlgorithm, LPCWSTR pszAlgId, LPCWSTR pszImplementation, ULONG dwFlags)
+{
+    NTSTATUS success;
+    char* algorithm = NULL;
+    char* provider = NULL;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptOpenAlgorithmProvider(dwFlags=%d, pszImplementation=%s):", dwFlags, pszImplementation);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszAlgId, -1, &algorithm, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptOpenAlgorithmProvider cryptographic algorithm: %s", algorithm);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszImplementation, -1, &provider, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptOpenAlgorithmProvider provider: %s", provider);
+    
+    success = Real_BCryptOpenAlgorithmProvider(phAlgorithm, pszAlgId, pszImplementation, dwFlags);
+
+    MsRdpEx_LogPrint(TRACE, "BCryptOpenAlgorithmProvider(phAlgorithm=%p, pszAlgId=%s, dwFlags=%d, pszImplementation=%s):", phAlgorithm, pszAlgId, dwFlags, pszImplementation);
+
+    return success;
+}
+
+NTSTATUS Hook_BCryptSetProperty(BCRYPT_HANDLE hObject, LPCWSTR pszProperty, PUCHAR pbInput, ULONG cbInput, ULONG dwFlags)
+{
+    NTSTATUS success;
+    char* property = NULL;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptSetProperty(dwFlags=%d):", dwFlags);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszProperty, -1, &property, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptSetProperty property: %s", property);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbInput, (size_t)cbInput);
+    
+    success = Real_BCryptSetProperty(hObject, pszProperty, pbInput, cbInput, dwFlags);
+
+    return success;
+}
+
+NTSTATUS Hook_BCryptGetProperty(BCRYPT_HANDLE hObject, LPCWSTR pszProperty, PUCHAR pbOutput, ULONG cbOutput, ULONG* pcbResult, ULONG dwFlags)
+{
+    NTSTATUS success;
+    char* property = NULL;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptGetProperty(dwFlags=%d, cbOutput=%d):", dwFlags, cbOutput);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszProperty, -1, &property, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptGetProperty property: %s", property);
+    
+    success = Real_BCryptGetProperty(hObject, pszProperty, pbOutput, cbOutput, pcbResult, dwFlags);
+
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbOutput, (size_t)cbOutput);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pcbResult, (size_t)cbOutput);
+
+    return success;
+}
+
+NTSTATUS Hook_BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags)
+{
+    NTSTATUS success;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptGenRandom(dwFlags=%d, cbBuffer=%d):", dwFlags, cbBuffer);
+    
+    success = Real_BCryptGenRandom(hAlgorithm, pbBuffer, cbBuffer, dwFlags);
+
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbBuffer, (size_t)cbBuffer);
 
     return success;
 }
@@ -620,10 +699,18 @@ LONG MsRdpEx_AttachHooks()
         MSRDPEX_GETPROCADDRESS(Real_BCryptImportKey, fnBCryptImportKey, g_hBCrypt, "BCryptImportKey");
         MSRDPEX_GETPROCADDRESS(Real_BCryptImportKeyPair, fnBCryptImportKeyPair, g_hBCrypt, "BCryptImportKeyPair");
         MSRDPEX_GETPROCADDRESS(Real_BCryptEncrypt, fnBCryptEncrypt, g_hBCrypt, "BCryptEncrypt");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptOpenAlgorithmProvider, fnBCryptOpenAlgorithmProvider, g_hBCrypt, "BCryptOpenAlgorithmProvider");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptSetProperty, fnBCryptSetProperty, g_hBCrypt, "BCryptSetProperty");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptGetProperty, fnBCryptGetProperty, g_hBCrypt, "BCryptGetProperty");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptGenRandom, fnBCryptGenRandom, g_hBCrypt, "BCryptGenRandom");
 
         MSRDPEX_DETOUR_ATTACH(Real_BCryptImportKey, Hook_BCryptImportKey);
         MSRDPEX_DETOUR_ATTACH(Real_BCryptImportKeyPair, Hook_BCryptImportKeyPair);
         MSRDPEX_DETOUR_ATTACH(Real_BCryptEncrypt, Hook_BCryptEncrypt);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptOpenAlgorithmProvider, Hook_BCryptOpenAlgorithmProvider);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptSetProperty, Hook_BCryptSetProperty);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptGetProperty, Hook_BCryptGetProperty);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptGenRandom, Hook_BCryptGenRandom);
     }
 
     MsRdpEx_AttachSspiHooks();
@@ -672,6 +759,10 @@ LONG MsRdpEx_DetachHooks()
         MSRDPEX_DETOUR_DETACH(Real_BCryptImportKey, Hook_BCryptImportKey);
         MSRDPEX_DETOUR_DETACH(Real_BCryptImportKeyPair, Hook_BCryptImportKeyPair);
         MSRDPEX_DETOUR_DETACH(Real_BCryptEncrypt, Hook_BCryptEncrypt);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptOpenAlgorithmProvider, Hook_BCryptOpenAlgorithmProvider);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptSetProperty, Hook_BCryptSetProperty);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptGetProperty, Hook_BCryptGetProperty);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptGenRandom, Hook_BCryptGenRandom);
     }
 
     MsRdpEx_DetachSspiHooks();
