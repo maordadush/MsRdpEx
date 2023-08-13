@@ -489,6 +489,12 @@ typedef NTSTATUS(WINAPI* fnBCryptGetProperty)(BCRYPT_HANDLE hObject, LPCWSTR psz
 
 typedef NTSTATUS(WINAPI* fnBCryptGenRandom)(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags);
 
+typedef NTSTATUS(WINAPI* fnBCryptCreateHash)(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_HASH_HANDLE* phHash, PUCHAR pbHashObject, ULONG cbHashObject, PUCHAR pbSecret, ULONG cbSecret, ULONG dwFlags);
+
+typedef NTSTATUS(WINAPI* fnBCryptGenerateSymmetricKey)(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDLE* phKey, PUCHAR pbKeyObject, ULONG cbKeyObject, PUCHAR pbSecret, ULONG cbSecret, ULONG dwFlags);
+
+typedef NTSTATUS(WINAPI* fnBCryptResolveProviders)(LPCWSTR pszContext, ULONG dwInterface, LPCWSTR pszFunction, LPCWSTR pszProvider, ULONG dwMode, ULONG dwFlags, ULONG* pcbBuffer, PCRYPT_PROVIDER_REFS* ppBuffer);
+
 static fnBCryptImportKey Real_BCryptImportKey = NULL;
 static fnBCryptImportKeyPair Real_BCryptImportKeyPair = NULL;
 static fnBCryptEncrypt Real_BCryptEncrypt = NULL;
@@ -496,6 +502,9 @@ static fnBCryptOpenAlgorithmProvider Real_BCryptOpenAlgorithmProvider = NULL;
 static fnBCryptSetProperty Real_BCryptSetProperty = NULL;
 static fnBCryptGetProperty Real_BCryptGetProperty = NULL;
 static fnBCryptGenRandom Real_BCryptGenRandom = NULL;
+static fnBCryptCreateHash Real_BCryptCreateHash = NULL;
+static fnBCryptGenerateSymmetricKey Real_BCryptGenerateSymmetricKey = NULL;
+static fnBCryptResolveProviders Real_BCryptResolveProviders= NULL;
 
 NTSTATUS Hook_BCryptImportKey(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDLE hImportKey,
     LPCWSTR pszBlobType, BCRYPT_KEY_HANDLE* phKey, PUCHAR pbKeyObject, ULONG cbKeyObject, PUCHAR pbInput, ULONG cbInput, ULONG dwFlags)
@@ -565,7 +574,7 @@ NTSTATUS Hook_BCryptOpenAlgorithmProvider(BCRYPT_ALG_HANDLE* phAlgorithm, LPCWST
     
     success = Real_BCryptOpenAlgorithmProvider(phAlgorithm, pszAlgId, pszImplementation, dwFlags);
 
-    MsRdpEx_LogPrint(TRACE, "BCryptOpenAlgorithmProvider(phAlgorithm=%p, pszAlgId=%s, dwFlags=%d, pszImplementation=%s):", phAlgorithm, pszAlgId, dwFlags, pszImplementation);
+    MsRdpEx_LogPrint(TRACE, "BCryptOpenAlgorithmProvider(phAlgorithm=%p, dwFlags=%d, pszImplementation=%s):", phAlgorithm, dwFlags, pszImplementation);
 
     return success;
 }
@@ -597,7 +606,6 @@ NTSTATUS Hook_BCryptGetProperty(BCRYPT_HANDLE hObject, LPCWSTR pszProperty, PUCH
     success = Real_BCryptGetProperty(hObject, pszProperty, pbOutput, cbOutput, pcbResult, dwFlags);
 
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbOutput, (size_t)cbOutput);
-    MsRdpEx_LogDump(TRACE, (uint8_t*)pcbResult, (size_t)cbOutput);
 
     return success;
 }
@@ -606,11 +614,58 @@ NTSTATUS Hook_BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULO
 {
     NTSTATUS success;
 
-    MsRdpEx_LogPrint(TRACE, "BCryptGenRandom(dwFlags=%d, cbBuffer=%d):", dwFlags, cbBuffer);
+    MsRdpEx_LogPrint(TRACE, "BCryptGenRandom(dwFlags=%d, hAlgorithm=%d):", dwFlags, cbBuffer);
     
     success = Real_BCryptGenRandom(hAlgorithm, pbBuffer, cbBuffer, dwFlags);
 
     MsRdpEx_LogDump(TRACE, (uint8_t*)pbBuffer, (size_t)cbBuffer);
+
+    return success;
+}
+
+NTSTATUS Hook_BCryptCreateHash(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_HASH_HANDLE* phHash, PUCHAR pbHashObject, ULONG cbHashObject, PUCHAR pbSecret, ULONG cbSecret, ULONG dwFlags)
+{
+    NTSTATUS success;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptCreateHash(dwFlags=%d, hAlgorithm=%p):", dwFlags, hAlgorithm);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbSecret, (size_t)cbSecret);
+    
+    success = Real_BCryptCreateHash(hAlgorithm, phHash, pbHashObject, cbHashObject, pbSecret, cbSecret, dwFlags);
+
+
+    return success;
+}
+
+NTSTATUS Hook_BCryptGenerateSymmetricKey(BCRYPT_ALG_HANDLE hAlgorithm, BCRYPT_KEY_HANDLE* phKey, PUCHAR pbKeyObject, ULONG cbKeyObject, PUCHAR pbSecret, ULONG cbSecret, ULONG dwFlags)
+{
+    NTSTATUS success;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptGenerateSymmetricKey(dwFlags=%d, hAlgorithm=%p):", dwFlags, hAlgorithm);
+    MsRdpEx_LogDump(TRACE, (uint8_t*)pbSecret, (size_t)cbSecret);
+    
+    success = Real_BCryptGenerateSymmetricKey(hAlgorithm, phKey, pbKeyObject, cbKeyObject, pbSecret, cbSecret, dwFlags);
+
+
+    return success;
+}
+
+NTSTATUS Hook_BCryptResolveProviders(LPCWSTR pszContext, ULONG dwInterface, LPCWSTR pszFunction, LPCWSTR pszProvider, ULONG dwMode, ULONG dwFlags, ULONG* pcbBuffer, PCRYPT_PROVIDER_REFS* ppBuffer)
+{
+    NTSTATUS success;
+    char* function = NULL;
+    char* provider = NULL;
+
+    MsRdpEx_LogPrint(TRACE, "BCryptResolveProviders(dwFlags=%d, dwMode=%d):", dwFlags, dwMode);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszFunction, -1, &function, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptResolveProviders function: %s", function);
+    MsRdpEx_ConvertFromUnicode(CP_UTF8, 0, pszProvider, -1, &provider, 0, NULL, NULL);
+    MsRdpEx_LogPrint(TRACE, "BCryptResolveProviders provider: %s", provider);
+    
+    
+    success = Real_BCryptResolveProviders(pszContext, dwInterface, pszFunction, pszProvider, dwMode, dwFlags, pcbBuffer, ppBuffer);
+
+    //MsRdpEx_LogDump(TRACE, (uint8_t*)ppBuffer, (size_t)pcbBuffer);
+
 
     return success;
 }
@@ -703,6 +758,9 @@ LONG MsRdpEx_AttachHooks()
         MSRDPEX_GETPROCADDRESS(Real_BCryptSetProperty, fnBCryptSetProperty, g_hBCrypt, "BCryptSetProperty");
         MSRDPEX_GETPROCADDRESS(Real_BCryptGetProperty, fnBCryptGetProperty, g_hBCrypt, "BCryptGetProperty");
         MSRDPEX_GETPROCADDRESS(Real_BCryptGenRandom, fnBCryptGenRandom, g_hBCrypt, "BCryptGenRandom");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptCreateHash, fnBCryptCreateHash, g_hBCrypt, "BCryptCreateHash");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptGenerateSymmetricKey, fnBCryptGenerateSymmetricKey, g_hBCrypt, "BCryptGenerateSymmetricKey");
+        MSRDPEX_GETPROCADDRESS(Real_BCryptResolveProviders, fnBCryptResolveProviders, g_hBCrypt, "BCryptResolveProviders");
 
         MSRDPEX_DETOUR_ATTACH(Real_BCryptImportKey, Hook_BCryptImportKey);
         MSRDPEX_DETOUR_ATTACH(Real_BCryptImportKeyPair, Hook_BCryptImportKeyPair);
@@ -711,6 +769,9 @@ LONG MsRdpEx_AttachHooks()
         MSRDPEX_DETOUR_ATTACH(Real_BCryptSetProperty, Hook_BCryptSetProperty);
         MSRDPEX_DETOUR_ATTACH(Real_BCryptGetProperty, Hook_BCryptGetProperty);
         MSRDPEX_DETOUR_ATTACH(Real_BCryptGenRandom, Hook_BCryptGenRandom);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptCreateHash, Hook_BCryptCreateHash);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptGenerateSymmetricKey, Hook_BCryptGenerateSymmetricKey);
+        MSRDPEX_DETOUR_ATTACH(Real_BCryptResolveProviders, Hook_BCryptResolveProviders);
     }
 
     MsRdpEx_AttachSspiHooks();
@@ -763,6 +824,9 @@ LONG MsRdpEx_DetachHooks()
         MSRDPEX_DETOUR_DETACH(Real_BCryptSetProperty, Hook_BCryptSetProperty);
         MSRDPEX_DETOUR_DETACH(Real_BCryptGetProperty, Hook_BCryptGetProperty);
         MSRDPEX_DETOUR_DETACH(Real_BCryptGenRandom, Hook_BCryptGenRandom);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptCreateHash, Hook_BCryptCreateHash);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptGenerateSymmetricKey, Hook_BCryptGenerateSymmetricKey);
+        MSRDPEX_DETOUR_DETACH(Real_BCryptResolveProviders, Hook_BCryptResolveProviders);
     }
 
     MsRdpEx_DetachSspiHooks();
